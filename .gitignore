@@ -9,3 +9,4 @@ wheels/
 # Virtual environments
 .venv
 nmap_flags.toml
+tree_scan.txt
