@@ -89,7 +89,7 @@ class SCAN():
             result = []
             for item in ip_list:
                 ip = item['ip_addres']
-                base_arg = '-Pn -sV -T3 -v'
+                base_arg = '-Pn -sV -T4 -v'
                 if ':' in ip:
                     base_arg += ' -6'
 

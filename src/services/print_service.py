@@ -3,7 +3,7 @@
 
 class PRINT():
 
-    def print_result(scan_results_list: list):
+    def print_result(scan_results_list: list) -> dict:
         if not scan_results_list:
             print("\033[31m[!] Нет данных для отрисовки отчета.\033[0m")
             return
@@ -63,6 +63,9 @@ class PRINT():
                     print(f"{GRAY}" + "-" * 80 + f"{RESET}\n")
                     continue
 
+                
+                
+                
                 for port, info in tcp_ports.items():
                     service_name = info.get('name', 'unknown')
                     product = info.get('product', '').strip()
@@ -84,3 +87,5 @@ class PRINT():
                         print(f"            {GRAY}└── Доп. информация:   {WHITE}{extra_info}{RESET}")
                 
                 print(f"{GRAY}" + "-" * 80 + f"{RESET}\n")
+
+                return tcp_ports

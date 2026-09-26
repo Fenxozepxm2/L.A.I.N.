@@ -6,10 +6,12 @@ import os
 import ipaddress
 
 
+
 # Импортируем слои приложения
 from src.services.ip_service import IP_SERVICE
 from src.services.scan_service import SCAN
 from src.services.print_service import PRINT
+from src.web_analize.http_headers import get_http_headers
 
 
 
@@ -51,7 +53,47 @@ async def main():
             return
 
         open_ports = scanner.check_ports(hosts)
-        PRINT.print_result(open_ports)
+        live_ports = PRINT.print_result(open_ports)
+
+        web_services = []
+        
+        # Перебираем порт и его данные (port_info)
+        for port, port_info in live_ports.items():
+            # Проверяем, что порт открыт и его служба связана с вебом (http или https)
+            if port_info.get('state') == 'open':
+                service_name = port_info.get('name', '').lower()
+                
+                if 'http' in service_name or 'https' in service_name:
+                    # (В будущем, если хостов много, ip нужно будет передавать вместе с live_ports)
+                    current_ip = hosts[0]['ip_addres'] 
+                    web_services.append({'ip': current_ip, 'port': port})
+
+        if web_services:
+            print(f"\n[+] Обнаружено веб-служб для анализа: {len(web_services)}")
+            
+            # Асинхронный запрос согласия пользователя
+            answr = await asyncio.to_thread(
+                input, f"└──> Хотите начать асинхронный анализ HTTP-заголовков {target_domain}({current_ip})? [Y/n]: "
+            )
+            answr = answr.lower().strip()
+            
+            if answr in ['y', '']:
+                print("\n[*] Запуск параллельного анализа HTTP-заголовков...")
+                
+                # Собираем пачку асинхронных задач
+                tasks = []
+                for service in web_services:
+                    # Формируем задачу для httpx (убедись, что http_headers_analyzer — это async def)
+                    task = get_http_headers(ip=service['ip'], port=service['port'])
+                    tasks.append(task)
+                
+                # Стреляем всеми запросами ОДНОВРЕМЕННО
+                await asyncio.gather(*tasks)
+                print("\n[+] Анализ HTTP-заголовков успешно завершен.")
+            else:
+                print("[*] Анализ заголовков пропущен пользователем.")
+
+            
 
     except KeyboardInterrupt:
         print("\n[!] Сканирование прервано пользователем.")
