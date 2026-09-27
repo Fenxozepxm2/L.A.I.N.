@@ -5,6 +5,8 @@ import asyncio
 import os
 import ipaddress
 
+from tests.check_cb import check_conn_db
+
 
 
 # Импортируем слои приложения
@@ -108,4 +110,7 @@ async def main():
 
 
 if __name__ == "__main__":
+
+    asyncio.run(check_conn_db())
+
     asyncio.run(main())

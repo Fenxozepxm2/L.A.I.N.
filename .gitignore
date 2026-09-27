@@ -10,3 +10,4 @@ wheels/
 .venv
 nmap_flags.toml
 tree_scan.txt
+settings.toml
