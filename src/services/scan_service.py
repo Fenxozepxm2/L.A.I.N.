@@ -86,10 +86,10 @@ class SCAN():
 
 
         try:
-            result = []
+            result: list[dict[str, str]] = []
             for item in ip_list:
                 ip = item['ip_addres']
-                base_arg = '-Pn -sV -T4 -v'
+                base_arg = '-Pn -sV -v -F -T3' # 
                 if ':' in ip:
                     base_arg += ' -6'
 
