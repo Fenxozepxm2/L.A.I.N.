@@ -8,7 +8,13 @@ from urllib.parse import urlparse, urlencode
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 
+
+import sslyze
+
 import typer
+
+from typing import Annotated
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -113,6 +119,9 @@ def _format_service(port) -> str:
 
     if software:
         return f"{service} ({software})"
+
+    print("debug" + "\n" + "-"*80 + f"{service}" + "\n" + "-"*80)
+    
     return service
 
 
@@ -173,7 +182,9 @@ def _print_scan_report(audit_report: ScanAuditSummary) -> None:
         console.print(table)
 
 
-def scan_ports(hosts: list) -> ScanAuditSummary | None:
+def scan_ports(
+        hosts: list
+) -> ScanAuditSummary | None:
     """
     Сканирует порты/сервисы и возвращает именно ScanAuditSummary.
     Никаких сырых repr() и len(ScanAuditSummary).
@@ -285,7 +296,9 @@ async def analyze_http(web_services: list) -> list:
 
 
 
-
+# nmap.scanme.org
+# 192.168.0.1
+# badssl.com (tls)
 
 
 
@@ -294,7 +307,10 @@ async def analyze_http(web_services: list) -> list:
 # 9. ГЛАВНЫЙ PIPELINE
 # ============================================================
 
-async def run_audit(target: Target) -> None:
+async def run_audit(
+        target: Target,
+
+) -> None:
     """Полный pipeline аудита."""
     console.print(
         Panel.fit(
@@ -309,6 +325,7 @@ async def run_audit(target: Target) -> None:
     if not hosts:
         return
 
+
     scan_results = scan_ports(hosts)
     if not scan_results:
         return
@@ -319,6 +336,9 @@ async def run_audit(target: Target) -> None:
     total_open_ports = sum(
         len(host.open_ports) for host in scan_results.hosts
     )
+
+
+
 
 
     summary = Table.grid(padding=(0, 2))
@@ -337,7 +357,7 @@ async def run_audit(target: Target) -> None:
 
 
 # ============================================================
-# TYper COMMAND
+# Typer COMMAND
 # ============================================================
 
 @app.command()
@@ -356,6 +376,7 @@ def scan(
             value=target,
             type=detect_target_type(target),
         )
+
         asyncio.run(run_audit(target_model))
 
     except KeyboardInterrupt:
@@ -367,6 +388,30 @@ def scan(
         if sys.platform != "win32":
             os.system("stty sane")
         print("\n[✓] Работа комплекса L.A.I.N. успешно завершена.")
+
+@app.command()
+def audit(
+    target: Annotated[str, typer.Argument(..., help="IP, подсеть, домен или URL")] = ""
+):
+
+    """"
+        запуск полноценного полного аудита (через конфиг)
+    """
+    pass
+
+
+@app.command()
+def tls(
+    hostname: Annotated[str, typer.Argument(..., help="ip/hostname")] = "",
+    ports: Annotated[list[int], typer.Argument(..., help="ports")] = []
+) -> None:
+    from services.tls_analyze import check_ports
+
+    print(f"{hostname}: " + f"{ports}")
+
+
+    asyncio.run(check_ports(hostname, ports))
+
 
 
 @app.command()

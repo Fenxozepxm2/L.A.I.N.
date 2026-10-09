@@ -12,6 +12,7 @@ dependencies = [
     "pydantic>=2.13.5",
     "python-nmap>=0.7.1",
     "sqlalchemy[asyncio]>=2.1.1",
+    "sslyze>=6.3.1",
     "tqdm>=4.70.1",
     "typer>=0.27.2",
 ]
