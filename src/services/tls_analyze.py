@@ -1,11 +1,12 @@
 import asyncio
-from sslyze import Scanner, ServerScanRequest, ServerNetworkLocation, ScanCommand
+from sslyze import Scanner, ServerScanRequest, ServerNetworkLocation, ScanCommand, ServerScanResult
+from datetime import datetime
 
-async def check_ports(hostname: str, ports: list):
+async def check_tls_ports(hostname: str, ports: list):
     scaner = Scanner()
     requests = []
 
-
+    current_time = datetime.now()
 
     for port in ports:
         server_location = ServerNetworkLocation(hostname, port)
@@ -67,42 +68,44 @@ async def check_ports(hostname: str, ports: list):
             "TLS_1_3_CIPHER_SUITES": result.scan_result.tls_1_3_cipher_suites,
         }
 
-        # for name, plugin_wrapper in plugins.items():
-        #     print(f"[{name}]")
-        #     if plugin_wrapper is None:
-        #         print("  -> Плагин вернул None")
-        #     elif plugin_wrapper.result is None:
-        #         print(f"  -> Внутри .result пусто. Статус: {plugin_wrapper.status}. Ошибка: {plugin_wrapper.error_reason}")
-        #     else:
-        #         # Смотрим свойства НАСТОЯЩЕГО объекта с данными, который лежит в .result
-        #         inner_fields = [attr for attr in dir(plugin_wrapper.result) if not attr.startswith("__")]
-        #         print(f"  -> Настоящие поля внутри .result: {inner_fields}")
-        #     print("-" * 50)
-
-
-        tls1_2 = result.scan_result.tls_1_2_cipher_suites
-
-
-        # print(tls1_2, "\n")
-        # print(tls1_2.result)
-
-        accepted_suite_list = []
-
-        if tls1_2 and tls1_2.status.value == "COMPLETED":
-            tls1_2accepted = tls1_2.result.accepted_cipher_suites
-            for accepted_suite in tls1_2accepted:
-                accepted_suite_list.append(accepted_suite.cipher_suite.name)
-
-        print(accepted_suite_list)
-            
+        accepted = await parse_sertifacates(result)
+        # смотрим что ваще пришло нам в скане
+        print(accepted)
+        # пишем ещё анализ http заголовков 
 
         
-
-
-
-        # print(result.scan_result.heartbleed.status)
-
+            
 
     
 
+
+async def parse_sertifacates(result: ServerScanResult, tls_version: list[str] = None) -> dict[str, list[str]]: # пока что лист чуть позже добавь модель (по настроению)
     
+    """
+        Универсально парсит принятые чипсет suit с tls 
+    """
+    
+    if not tls_version:
+        # это приставки от _cipher_suites
+        tls_version = ["tls_1_0", "tls_1_1", "tls_1_2", "tls_1_3"]
+    
+    all_accepted_suits = {}
+
+    for version in tls_version:
+        full_name_tls_version = f"{version}_cipher_suites"
+
+        tls_data = getattr(result.scan_result, full_name_tls_version, None)
+
+        if not tls_data:
+            continue
+
+        if tls_data.status.value == "COMPLETED":
+            accepted_suite_list = []
+
+            for accepted_suite in tls_data.result.accepted_cipher_suites:
+                accepted_suite_list.append(accepted_suite.cipher_suite.name)
+
+            all_accepted_suits[version] = accepted_suite_list
+    
+    return all_accepted_suits
+        

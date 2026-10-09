@@ -405,12 +405,12 @@ def tls(
     hostname: Annotated[str, typer.Argument(..., help="ip/hostname")] = "",
     ports: Annotated[list[int], typer.Argument(..., help="ports")] = []
 ) -> None:
-    from services.tls_analyze import check_ports
+    from services.tls_analyze import check_tls_ports
 
     print(f"{hostname}: " + f"{ports}")
 
 
-    asyncio.run(check_ports(hostname, ports))
+    asyncio.run(check_tls_ports(hostname, ports))
 
 
 
