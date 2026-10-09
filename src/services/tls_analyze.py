@@ -67,19 +67,34 @@ async def check_ports(hostname: str, ports: list):
             "TLS_1_3_CIPHER_SUITES": result.scan_result.tls_1_3_cipher_suites,
         }
 
-        for name, plugin_wrapper in plugins.items():
-            print(f"[{name}]")
-            if plugin_wrapper is None:
-                print("  -> Плагин вернул None")
-            elif plugin_wrapper.result is None:
-                print(f"  -> Внутри .result пусто. Статус: {plugin_wrapper.status}. Ошибка: {plugin_wrapper.error_reason}")
-            else:
-                # Смотрим свойства НАСТОЯЩЕГО объекта с данными, который лежит в .result
-                inner_fields = [attr for attr in dir(plugin_wrapper.result) if not attr.startswith("__")]
-                print(f"  -> Настоящие поля внутри .result: {inner_fields}")
-            print("-" * 50)
+        # for name, plugin_wrapper in plugins.items():
+        #     print(f"[{name}]")
+        #     if plugin_wrapper is None:
+        #         print("  -> Плагин вернул None")
+        #     elif plugin_wrapper.result is None:
+        #         print(f"  -> Внутри .result пусто. Статус: {plugin_wrapper.status}. Ошибка: {plugin_wrapper.error_reason}")
+        #     else:
+        #         # Смотрим свойства НАСТОЯЩЕГО объекта с данными, который лежит в .result
+        #         inner_fields = [attr for attr in dir(plugin_wrapper.result) if not attr.startswith("__")]
+        #         print(f"  -> Настоящие поля внутри .result: {inner_fields}")
+        #     print("-" * 50)
 
 
+        tls1_2 = result.scan_result.tls_1_2_cipher_suites
+
+
+        # print(tls1_2, "\n")
+        # print(tls1_2.result)
+
+        accepted_suite_list = []
+
+        if tls1_2 and tls1_2.status.value == "COMPLETED":
+            tls1_2accepted = tls1_2.result.accepted_cipher_suites
+            for accepted_suite in tls1_2accepted:
+                accepted_suite_list.append(accepted_suite.cipher_suite.name)
+
+        print(accepted_suite_list)
+            
 
         
 
