@@ -1,6 +1,6 @@
 import httpx
 from web_analize.security_rules import check_csp, check_hsts, check_referrer_policy, check_technology_disclosure, check_x_content_type, check_x_frame
-
+from pydantic_models.models import HTTPResult
 
 required_headers = ['content-security-policy', 'x-frame-options', 'strict-transport-security']
 
@@ -17,7 +17,7 @@ SECURITY_RULES = {
 }
 
 
-async def get_http_headers(port: int, ip: str) -> dict:
+async def get_http_headers(port: int, ip: str) -> HTTPResult:
     formatted_ip = f"[{ip}]" if ":" in ip else ip
     protocol = 'https' if port == 443 else 'http'
     url = f'{protocol}://{formatted_ip}:{port}'

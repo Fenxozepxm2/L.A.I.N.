@@ -11,3 +11,6 @@ wheels/
 nmap_flags.toml
 tree_scan.txt
 settings.toml
+main.py.set
+tree.txt
+scan_result.txt

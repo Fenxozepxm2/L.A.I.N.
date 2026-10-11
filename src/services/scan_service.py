@@ -86,14 +86,14 @@ class SCAN():
 
 
         try:
-            result = []
+            result: list[dict[str, str]] = []
             for item in ip_list:
                 ip = item['ip_addres']
-                base_arg = '-Pn -sV -T4 -v'
+                base_arg = '-Pn -sV -v -F -T4' # 
                 if ':' in ip:
                     base_arg += ' -6'
 
-                print(f"[*] Сканирую хост {ip} (ищу открытые порты, версии ПО и ОС)... ", end="", flush=True)
+                print(f"[*] Сканирую хост {ip} (ищу открытые порты, версии ПО и ОС) С аргументами {base_arg}", end="", flush=True)
                 scan = self.np.scan(hosts=ip, arguments=base_arg)
                 print("Готово! " + '\n')
                 result.append(scan)
