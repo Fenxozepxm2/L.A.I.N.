@@ -1,5 +1,8 @@
 from datetime import datetime
 import ipaddress
+
+from typing import List, Optional
+
 from pydantic import BaseModel, Field
 from .enums import *
 
@@ -136,7 +139,7 @@ class Vulnerability(BaseModel):
 
 
 
-class ScanResult(BaseModel):
+class ScanPortsResult(BaseModel):
     id: int
     target: Target
     name: str | None = None
@@ -144,6 +147,28 @@ class ScanResult(BaseModel):
     hosts_count: int | None = None
     ports_count: int | None = None
     findings_count: int | None = None
+
+class TlsVersionResult(BaseModel):
+    version: str = Field(..., description="Версия протокола (например, tls_1_2)")
+    accepted_ciphers: List[str] = Field(..., description="Список принятых сервером шифров")
+
+# Модель с подробными данными о SSL-сертификате
+class CertificateInfoResult(BaseModel):
+    subject: str = Field(..., description="Кому выдан сертификат (Common Name)")
+    issuer: str = Field(..., description="Кем выдан сертификат (Удостоверяющий центр)")
+    is_valid: bool = Field(..., description="Является ли сертификат валидным на момент проверки")
+    key_type: str = Field(..., description="Тип алгоритма ключа (RSA или ECDSA)")
+    key_size: Optional[int] = Field(None, description="Размер ключа в битах (например, 2048)")
+    fingerprint_sha256: str = Field(..., description="Уникальный SHA-256 отпечаток сертификата")
+    not_before: Optional[str] = Field(None, description="Дата начала действия в ISO формате")
+    not_after: Optional[str] = Field(None, description="Дата окончания действия в ISO формате")
+    validation_errors: List[str] = Field(default_factory=list, description="Список ошибок валидации")
+
+# Главная мастер-модель, объединяющая весь скан
+class AllTlsScanResult(BaseModel):
+    target_host: str = Field(..., description="Сканируемый домен или IP-адрес")
+    ciphers: List[TlsVersionResult] = Field(..., description="Результаты сканирования TLS-протоколов")
+    certificate: Optional[CertificateInfoResult] = Field(None, description="Данные о сертификате сервера")
 
 from pydantic import BaseModel, Field
 from typing import List, Dict, Optional

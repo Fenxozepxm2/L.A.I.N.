@@ -1,6 +1,9 @@
 import asyncio
 from sslyze import Scanner, ServerScanRequest, ServerNetworkLocation, ScanCommand, ServerScanResult
 
+
+from pydantic_models.models import TlsVersionResult, CertificateInfoResult, AllTlsScanResult
+
 from cryptography.hazmat.primitives import hashes
 
 from datetime import datetime
@@ -73,109 +76,99 @@ async def check_tls_ports(hostname: str, ports: list):
 
         # смотрим что ваще пришло нам в скане
         accepted = await parse_sertifacates(result)
+
         print(accepted)
-
-        # отчёт по tls сертификату
-        certificate_info = await parse_tls_certificate_info(result)
-
         
         # пишем ещё анализ http заголовков 
 
         
-async def parse_tls_certificate_info(result: ServerScanResult) -> None:
-    certificate_info = result.scan_result.certificate_info
-
-    if certificate_info.error_trace:
-        return print("Scan not completed!")
 
 
-    certificate_data = certificate_info.result
-    deployments = certificate_data.certificate_deployments
-
-    if not deployments:
-        print("No certificate")
-
-    main_deployment = deployments[0]
-
-    leaf_cert = main_deployment.path_validation_results[0]
-
-    # print(deployments[0].path_validation_results) # проверяем прошёл ли валидацию
-
-    # print(deployments[0].path_validation_results[0].validation_error) # проверяем на ошибку
-
-    errors = []
-    for path_result in main_deployment.path_validation_results:
-        if path_result.validation_error:
-            errors.append(path_result.validation_error)
-            print(f"Ошибка валидации {deployments[0].path_validation_results[0].validation_error}")
-
-    
-    is_valid = len(errors) == 0
-
-    # print(deployments[0].path_validation_results[0].verified_certificate_chain[0]) # проверяем на верификацию пути
-
-    subject = deployments[0].received_certificate_chain[0].subject.rfc4514_string() # кому выдан
-    
-    issuer = deployments[0].received_certificate_chain[0].issuer.rfc4514_string() # кем выдан
-
-
-    public_key = deployments[0].received_certificate_chain[0].public_key() # имя ключа
-    if hasattr(public_key, "key_size"):
-        key_size = public_key.key_size
-        key_type = "RSA"
-    elif hasattr(public_key, "curve"):
-        key_size = public_key.curve.key_size
-        key_type = "ECDSA"
-
-
-
-    fingerprint = deployments[0].received_certificate_chain[0].fingerprint(hashes.SHA256()).hex().upper()
-    # print(fingerprint)
-    
-
-
-    return {
-        "subject": str(subject),
-        "issuer": str(issuer),
-        "validation_errors": errors, 
-        "key_size": key_size,
-        "key_type": key_type,
-        "not_before": leaf_cert.verified_certificate_chain[0].not_valid_before_utc.isoformat(),
-        "not_after":  leaf_cert.verified_certificate_chain[0].not_valid_after_utc.isoformat(),
-        "is_valid": is_valid,
-        "fingerprint": fingerprint
-    }
-
-
-
-
-async def parse_sertifacates(result: ServerScanResult, tls_version: list[str] = None) -> dict[str, list[str]]: # пока что лист чуть позже добавь модель (по настроению)
+async def parse_sertifacates(result: ServerScanResult, tls_version: list[str] = None) -> AllTlsScanResult: # пока что лист чуть позже добавь модель (по настроению)
     
     """
-        Универсально парсит принятые чипсет suit с tls 
+    Мастер-парсер: собирает шифры и сертификат из ServerScanResult 
+    и упаковывает в единую Pydantic-модель AllTlsScanResult.
     """
     
     if not tls_version:
         # это приставки от _cipher_suites
         tls_version = ["tls_1_0", "tls_1_1", "tls_1_2", "tls_1_3"]
     
-    all_accepted_suits = {}
-
+    parsed_ciphers = []
+    
     for version in tls_version:
         full_name_tls_version = f"{version}_cipher_suites"
 
         tls_data = getattr(result.scan_result, full_name_tls_version, None)
 
-        if not tls_data:
+        if not tls_data or tls_data.status.value != "COMPLETED":
             continue
 
-        if tls_data.status.value == "COMPLETED":
-            accepted_suite_list = []
+        accepted_suite_list = [
+            suite.cipher_suite.name for suite in tls_data.result.accepted_cipher_suites
+        ]
 
-            for accepted_suite in tls_data.result.accepted_cipher_suites:
-                accepted_suite_list.append(accepted_suite.cipher_suite.name)
+        parsed_ciphers.append(TlsVersionResult(version=version, accepted_ciphers=accepted_suite_list))
 
-            all_accepted_suits[version] = accepted_suite_list
+
+        parsed_cert = None
+    cert_info = result.scan_result.certificate_info
     
-    return all_accepted_suits
+    if cert_info and cert_info.status.value == "COMPLETED" and cert_info.result.certificate_deployments:
+        main_deployment = cert_info.result.certificate_deployments[0]
+        received_leaf_cert = main_deployment.received_certificate_chain[0]
+        
+        # Сбор ошибок валидации
+        errors = [
+            path.validation_error for path in main_deployment.path_validation_results 
+            if path.validation_error
+        ]
+        is_valid = len(errors) == 0
+        
+        # Парсинг публичного ключа
+        public_key = received_leaf_cert.public_key()
+        key_size = None
+        key_type = "UNKNOWN"
+        
+        if hasattr(public_key, "key_size"):
+            key_size = public_key.key_size
+            key_type = "RSA"
+        elif hasattr(public_key, "curve"):
+            key_size = public_key.curve.key_size
+            key_type = "ECDSA"
+            
+        # Генерация фингерпринта
+        fingerprint = received_leaf_cert.fingerprint(hashes.SHA256()).hex().upper()
+        
+        # Безопасное извлечение дат с учетом предупреждений (совместимость с UTC)
+        if hasattr(received_leaf_cert, "not_valid_before_utc"):
+            not_before = received_leaf_cert.not_valid_before_utc.isoformat()
+            not_after = received_leaf_cert.not_valid_after_utc.isoformat()
+        else:
+            not_before = received_leaf_cert.not_valid_before.isoformat()
+            not_after = received_leaf_cert.not_valid_after.isoformat()
+            
+        # Упаковываеn в под-модель CertificateInfoResult
+        parsed_cert = CertificateInfoResult(
+            subject=received_leaf_cert.subject.rfc4514_string(),
+            issuer=received_leaf_cert.issuer.rfc4514_string(),
+            is_valid=is_valid,
+            key_type=key_type,
+            key_size=key_size,
+            fingerprint_sha256=fingerprint,
+            not_before=not_before,
+            not_after=not_after,
+            validation_errors=errors
+        )
+
+    # Извлекает сканируемый хост напрямую из объекта результатов sslyze
+    hostname = result.scan_result.certificate_info.result.hostname_used_for_server_name_indication
+
+    return AllTlsScanResult(
+        target_host=hostname,
+        ciphers=parsed_ciphers,
+        certificate=parsed_cert
+    )
+
         
