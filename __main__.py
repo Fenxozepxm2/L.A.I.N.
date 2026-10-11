@@ -297,7 +297,7 @@ async def analyze_http(web_services: list) -> list:
 
 
 # nmap.scanme.org
-# 192.168.0.1
+# 192.168.1.0/24
 # badssl.com (tls)
 
 
