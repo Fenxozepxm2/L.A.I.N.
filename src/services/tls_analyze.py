@@ -6,6 +6,8 @@ from pydantic_models.models import TlsVersionResult, CertificateInfoResult, AllT
 
 from cryptography.hazmat.primitives import hashes
 
+from src.services.print_service import PRINT
+
 from datetime import datetime
 
 async def check_tls_ports(hostname: str, ports: list):
@@ -77,7 +79,7 @@ async def check_tls_ports(hostname: str, ports: list):
         # смотрим что ваще пришло нам в скане
         accepted = await parse_sertifacates(result)
 
-        print(accepted)
+        PRINT.print_tls_result(accepted)
         
         # пишем ещё анализ http заголовков 
 
@@ -163,7 +165,7 @@ async def parse_sertifacates(result: ServerScanResult, tls_version: list[str] = 
         )
 
     # Извлекает сканируемый хост напрямую из объекта результатов sslyze
-    hostname = result.scan_result.certificate_info.result.hostname_used_for_server_name_indication
+    hostname = result.server_location.hostname
 
     return AllTlsScanResult(
         target_host=hostname,

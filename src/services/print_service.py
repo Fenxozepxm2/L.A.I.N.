@@ -1,4 +1,4 @@
-    
+from pydantic_models.models import AllTlsScanResult
 
 
 class PRINT():
@@ -89,3 +89,87 @@ class PRINT():
                 print(f"{GRAY}" + "-" * 80 + f"{RESET}\n")
 
                 return tcp_ports
+
+    
+    def print_tls_result(tls_results: AllTlsScanResult) -> None:
+        if not tls_results:
+            print("\033[31m[!] Нет данных для отрисовки TLS-отчета.\033[0m")
+            return
+
+        CYAN = "\033[36m"
+        WHITE = "\033[37m"
+        GRAY = "\033[90m"
+        GREEN = "\033[32m"
+        YELLOW = "\033[33m"
+        RED = "\033[31m"
+        RESET = "\033[0m"
+
+        print(f"{CYAN}[*]{WHITE} Результаты TLS-аудита для хоста: {CYAN}{tls_results.target_host}{RESET}")
+        
+        # --- БЛОК СЕРТИФИКАТА ---
+        cert = tls_results.certificate
+        if cert:
+            cert_status = f"{GREEN}Валиден{RESET}" if cert.is_valid else f"{RED}НЕВАЛИДЕН{RESET}"
+            print(f"    {GRAY}├──{RESET} Данные SSL/TLS-сертификата:")
+            print(f"    {GRAY}│   ├──{RESET} Субъект (CN):          {WHITE}{cert.subject}{RESET}")
+            print(f"    {GRAY}│   ├──{RESET} Издатель (Issuer):     {WHITE}{cert.issuer}{RESET}")
+            print(f"    {GRAY}│   ├──{RESET} Статус сертификата:   {cert_status}")
+            
+            # Подсветка слабых ключей
+            key_color = GREEN if cert.key_size >= 2048 else RED
+            print(f"    {GRAY}│   ├──{RESET} Алгоритм и ключ:       {YELLOW}{cert.key_type}{RESET} ({key_color}{cert.key_size} бит{RESET})")
+            print(f"    {GRAY}│   ├──{RESET} Отпечаток SHA-256:     {GRAY}{cert.fingerprint_sha256}{RESET}")
+            print(f"    {GRAY}│   └──{RESET} Срок действия:         {GRAY}{cert.not_before}{RESET} ── {GRAY}{cert.not_after}{RESET}")
+            
+            if cert.validation_errors:
+                print(f"    {GRAY}│       └── {RED}[!] Ошибки валидации: {cert.validation_errors}{RESET}")
+        else:
+            print(f"    {GRAY}├──{RESET} Данные SSL/TLS-сертификата: {RED}отсутствуют или не получены{RESET}")
+
+        # --- БЛОК ПРОТОКОЛОВ И ШИФРОВ ---
+        print(f"    {GRAY}└──{RESET} Поддерживаемые протоколы и наборы шифров:")
+        
+        ciphers_list = tls_results.ciphers
+        if not ciphers_list:
+            print(f"        {GRAY}└──{YELLOW} [!] Ни один протокол шифрования не принят сервером.{RESET}")
+            print(f"{GRAY}" + "-" * 80 + f"{RESET}\n")
+            return
+
+        for idx, tls_version in enumerate(ciphers_list):
+            # Проверяем последний ли элемент в списке версий для красивого закрытия ветки └──
+            is_last_version = (idx == len(ciphers_list) - 1)
+            ver_branch = f"└──" if is_last_version else f"├──"
+            ver_prefix = f"   " if is_last_version else f"│  "
+
+            # Цветовая индикация опасности старых протоколов
+            if tls_version.version in ["tls_1_0", "tls_1_1"]:
+                version_status = f"{RED}{tls_version.version.upper()} (УСТАРЕЛ/ОПАСЕН){RESET}"
+            elif tls_version.version == "tls_1_2":
+                version_status = f"{GREEN}{tls_version.version.upper()}{RESET}"
+            elif tls_version.version == "tls_1_3":
+                version_status = f"{CYAN}{tls_version.version.upper()} (РЕКОМЕНДУЕТСЯ){RESET}"
+            else:
+                version_status = f"{WHITE}{tls_version.version.upper()}{RESET}"
+
+            print(f"        {GRAY}{ver_branch}{RESET} Протокол {version_status}:")
+
+            if not tls_version.accepted_ciphers:
+                print(f"        {GRAY}{ver_prefix}   └──{GRAY} [на порту не поддерживается]{RESET}")
+                continue
+
+            for c_idx, cipher_name in enumerate(tls_version.accepted_ciphers):
+                is_last_cipher = (c_idx == len(tls_version.accepted_ciphers) - 1)
+                cipher_branch = f"└──" if is_last_cipher else f"├──"
+                
+                # Подсвечиваем заведомо дырявые шифры (например, старый 3DES, RC4 или NULL)
+                if any(bad in cipher_name for bad in ["3DES", "RC4", "NULL", "ANON"]):
+                    cipher_status = f"{RED}{cipher_name:<40} [УЯЗВИМ]{RESET}"
+                # Подсвечиваем шифры без Perfect Forward Secrecy (начинаются просто с TLS_RSA_)
+                elif cipher_name.startswith("TLS_RSA_"):
+                    cipher_status = f"{YELLOW}{cipher_name:<40} [Без PFS]{RESET}"
+                else:
+                    cipher_status = f"{WHITE}{cipher_name}{RESET}"
+
+                print(f"        {GRAY}{ver_prefix}   {cipher_branch}{RESET} {cipher_status}")
+        
+        print(f"\n{GRAY}" + "-" * 80 + f"{RESET}\n")

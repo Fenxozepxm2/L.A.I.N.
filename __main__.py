@@ -293,6 +293,28 @@ async def analyze_http(web_services: list) -> list:
     return normalized_results
 
 
+from urllib.parse import urlparse
+
+def extract_hostname(host: str) -> str:
+    """
+    Очищает ввод пользователя и вытаскивает чистый hostname.
+    Работает с 'http://site.com', 'https://site.com', 'site.com:443' и просто 'site.com'
+    """
+    host = host.strip()
+    
+    if not host.startswith(('http://', 'https://')):
+        parsed = urlparse(f'//{host}')
+    else:
+        parsed = urlparse(host)
+        
+    # Извлекаем hostname
+    hostname = parsed.hostname or parsed.path
+    
+
+    if hostname and ':' in hostname:
+        hostname = hostname.split(':')[0]
+        
+    return hostname
 
 
 
@@ -406,6 +428,9 @@ def tls(
     ports: Annotated[list[int], typer.Argument(..., help="ports")] = []
 ) -> None:
     from services.tls_analyze import check_tls_ports
+    
+
+    hostname = extract_hostname(hostname)
 
     print(f"{hostname}: " + f"{ports}")
 
