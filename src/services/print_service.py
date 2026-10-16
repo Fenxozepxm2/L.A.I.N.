@@ -1,7 +1,13 @@
-from pydantic_models.models import AllTlsScanResult, ScanAuditSummary
+from pydantic_models.models import (
+    SECURITY_HEADERS,
+    AllTlsScanResult,
+    ScanAuditSummary,
+    TargetScanInfo,
+)
 
 
 class PRINT:
+    @staticmethod
     def print_ports_info(audit_report: ScanAuditSummary) -> None:
         """Подробный древовидный вывод нормализованного ScanAuditSummary."""
         if not audit_report or not audit_report.hosts:
@@ -81,113 +87,9 @@ class PRINT:
 
             print(f"{GRAY}" + "-" * 80 + f"{RESET}\n")
 
-    def print_result(scan_results_list: list) -> dict:
-        if not scan_results_list:
-            print("\033[31m[!] Нет данных для отрисовки отчета.\033[0m")
-            return
-
-        CYAN = "\033[36m"
-        WHITE = "\033[37m"
-        GRAY = "\033[90m"
-        GREEN = "\033[32m"
-        YELLOW = "\033[33m"
-        RESET = "\033[0m"
-
-        print(
-            f"\n{CYAN}┌──────────────────────────────────────────────────────────────────┐"
-        )
-        print("│       ФИНАЛЬНЫЙ ОТЧЕТ ОБ АУДИТЕ ПЕРИМЕТРА СЕТИ (L.A.I.N.)        │")
-        print(
-            f"└──────────────────────────────────────────────────────────────────┘{RESET}\n"
-        )
-
-        for scan in scan_results_list:
-            if not scan or not isinstance(scan, dict):
-                continue
-
-            scanstats = scan.get("nmap", {}).get("scanstats", {})
-            elapsed_time = scanstats.get("elapsed", "0.00")
-
-            hosts_dict = scan.get("scan", {})
-            if not hosts_dict:
-                continue
-
-            for ip, host_data in hosts_dict.items():
-                status_info = host_data.get("status", {})
-                host_state = status_info.get("state", "unknown")
-                host_reason = status_info.get("reason", "unknown")
-
-                hostnames_list = host_data.get("hostnames", [])
-                device_name = "не определено"
-                if hostnames_list and isinstance(hostnames_list, list):
-                    potential_name = hostnames_list[0].get("name", "").strip()
-                    if potential_name:
-                        device_name = potential_name
-
-                os_list = host_data.get("osmatch", [])
-                detected_os = "не определена"
-                if os_list and isinstance(os_list, list):
-                    potential_os = os_list[0].get("name", "").strip()
-                    if potential_os:
-                        detected_os = potential_os
-
-                print(
-                    f"{CYAN}[*]{WHITE} Результаты аудита для хоста: {CYAN}{ip}{RESET}"
-                )
-                print(
-                    f"    {GRAY}├──{RESET} Локальное имя устройства: {WHITE}{device_name}{RESET}"
-                )
-                print(
-                    f"    {GRAY}├──{RESET} Операционная система:    {YELLOW}{detected_os}{RESET}"
-                )
-                print(
-                    f"    {GRAY}├──{RESET} Статус сетевого узла:    {GREEN}{host_state}{RESET} ({GRAY}reason: {host_reason}{RESET})"
-                )
-                print(
-                    f"    {GRAY}├──{RESET} Время анализа хоста:     {WHITE}{elapsed_time} сек.{RESET}"
-                )
-                print(f"    {GRAY}└──{RESET} Состояние портов и служб:")
-
-                tcp_ports = host_data.get("tcp", {})
-
-                if not tcp_ports:
-                    print(
-                        f"        {GRAY}└──{YELLOW} [!] В диапазоне Top-100 открытых портов не обнаружено. Хост заблокирован файрволом.{RESET}"
-                    )
-                    print(f"{GRAY}" + "-" * 80 + f"{RESET}\n")
-                    continue
-
-                for port, info in tcp_ports.items():
-                    service_name = info.get("name", "unknown")
-                    product = info.get("product", "").strip()
-                    version = info.get("version", "").strip()
-                    cpe_string = info.get("cpe", "").strip()
-                    extra_info = info.get("extrainfo", "").strip()
-
-                    if product or version:
-                        full_software = f"{product} {version}".strip()
-                    else:
-                        full_software = f"{GRAY}не определено{RESET}"
-
-                    print(
-                        f"        {CYAN}[+]{WHITE} Порт: {CYAN}{port:<5}{WHITE} | Служба: {YELLOW}{service_name:<10}{WHITE} | ПО: {full_software}{RESET}"
-                    )
-
-                    if cpe_string:
-                        print(
-                            f"            {GRAY}└── CPE Идентификатор: {GREEN}{cpe_string}{RESET}"
-                        )
-
-                    if extra_info:
-                        print(
-                            f"            {GRAY}└── Доп. информация:   {WHITE}{extra_info}{RESET}"
-                        )
-
-                return tcp_ports
-
     @staticmethod
-    def print_http_result(http_result: dict) -> None:
-        if not http_result:
+    def print_http_result(info: TargetScanInfo) -> None:
+        if info is None:
             print("\033[31m[!] Нет данных для отрисовки HTTP-отчета.\033[0m")
             return
 
@@ -199,32 +101,29 @@ class PRINT:
         RED = "\033[31m"
         RESET = "\033[0m"
 
-        ip = http_result.get("ip")
-        port = http_result.get("port")
-
         print(
-            f"{CYAN}[*]{WHITE} Результаты HTTP-аудита для адреса: {CYAN}{ip}:{port}{RESET}"
+            f"{CYAN}[*]{WHITE} Результаты HTTP-аудита для адреса: "
+            f"{CYAN}{info.scheme}://{info.ip}:{info.port}{RESET}"
         )
 
-        # Если во время запроса произошла ошибка (таймаут, отказ в соединении и т.д.)
-        if "error" in http_result:
+        if info.error:
             print(
-                f"    {GRAY}└──{RESET} {RED}[!] Ошибка сканирования HTTP: {http_result['error']}{RESET}"
+                f"    {GRAY}└──{RESET} {RED}[!] Ошибка сканирования HTTP: {info.error}{RESET}"
             )
             print(f"{GRAY}" + "-" * 80 + f"{RESET}\n")
             return
 
-        headers_data = http_result.get("result", {})
-        if not headers_data:
+        if not info.headers:
             print(
-                f"    {GRAY}└──{RESET} {YELLOW}[!] Сервер вернул пустой ответ.{RESET}"
+                f"    {GRAY}└──{RESET} {YELLOW}[!] Сервер не вернул HTTP-заголовки.{RESET}"
             )
             print(f"{GRAY}" + "-" * 80 + f"{RESET}\n")
             return
 
-        # --- БЛОК 1: Основная информация о веб-сервере ---
-        server_software = headers_data.get("Server", f"{GRAY}не определено{RESET}")
-        content_type = headers_data.get("Content-Type", f"{GRAY}не определено{RESET}")
+        # --- БЛОК 1: Инвентаризация ---
+        na = f"{GRAY}не определено{RESET}"
+        server_software = info.header("Server") or na
+        content_type = info.header("Content-Type") or na
 
         print(f"    {GRAY}├──{RESET} Инвентаризация веб-службы:")
         print(
@@ -234,53 +133,35 @@ class PRINT:
             f"    {GRAY}│   └──{RESET} Тип контента:          {WHITE}{content_type}{RESET}"
         )
 
-        # --- БЛОК 2: Анализ заголовков безопасности (Security Headers Audit) ---
-        print(f"    {GRAY}├──{RESET} Аудит заголовков безопасности (Compliance):")
+        # --- БЛОК 2: Заголовки безопасности ---
+        print(f"    {GRAY}├──{RESET} Аудит заголовков безопасности:")
 
-        # Список критических заголовков защиты и их описание для диплома
-        security_headers = {
-            "Strict-Transport-Security": "Защита от снижения шифрования (HSTS)",
-            "Content-Security-Policy": "Защита от XSS и инъекций контента (CSP)",
-            "X-Frame-Options": "Защита от UI-redirection (Clickjacking)",
-            "X-Content-Type-Options": "Защита от MIME-sniffing атак",
-            "X-XSS-Protection": "Устаревший фильтр XSS (Рекомендуется CSP)",
-        }
+        applicable = info.applicable_security_headers()
+        missing = info.missing_security_headers()
 
-        missing_headers = []
-
-        for header_name, description in security_headers.items():
-            # Ищем заголовок без учета регистра (HTTP-заголовки регистронезависимы)
-            header_value = next(
-                (
-                    v
-                    for k, v in headers_data.items()
-                    if k.lower() == header_name.lower()
-                ),
-                None,
-            )
-
-            if header_value:
-                # Ограничиваем длину вывода значения, чтобы не ломать терминал
-                short_value = (
-                    header_value
-                    if len(header_value) < 45
-                    else f"{header_value[:42]}..."
+        for header_name, description in SECURITY_HEADERS.items():
+            if header_name not in applicable:
+                print(
+                    f"    {GRAY}│   ├──{RESET} {GRAY}[~] {header_name:<26}{RESET} ── "
+                    f"{GRAY}не применимо (проверяется только по HTTPS){RESET}"
                 )
+            elif header_name in missing:
+                print(
+                    f"    {GRAY}│   ├──{RESET} {RED}[-] {header_name:<26}{RESET} ── "
+                    f"{GRAY}ОТСУТСТВУЕТ ({description}){RESET}"
+                )
+            else:
+                value = info.header(header_name) or ""
+                short_value = value if len(value) < 45 else f"{value[:42]}..."
                 print(
                     f"    {GRAY}│   ├──{RESET} {GREEN}[+] {header_name:<26}{RESET} ── {WHITE}{short_value}{RESET}"
                 )
-            else:
-                missing_headers.append(header_name)
-                print(
-                    f"    {GRAY}│   ├──{RESET} {RED}[-] {header_name:<26}{RESET} ── {GRAY}ОТСУТСТВУЕТ ({description}){RESET}"
-                )
 
-        # Выводим резюме по безопасности
-        if not missing_headers:
+        if not missing:
             print(
                 f"    {GRAY}│   └──{RESET} Статус безопасности:   {GREEN}ОТЛИЧНО (Все базовые заголовки настроены){RESET}"
             )
-        elif len(missing_headers) <= 2:
+        elif len(missing) <= 2:
             print(
                 f"    {GRAY}│   └──{RESET} Статус безопасности:   {YELLOW}СРЕДНИЙ (Пропущены некоторые настройки){RESET}"
             )
@@ -289,16 +170,28 @@ class PRINT:
                 f"    {GRAY}│   └──{RESET} Статус безопасности:   {RED}НИЗКИЙ (Рекомендуется ужесточение конфигурации){RESET}"
             )
 
-        # --- БЛОК 3: Сырой вывод для отладки ---
-        print(f"    {GRAY}└──{RESET} Полный дамп полученных HTTP-заголовков:")
+        # --- БЛОК 3: Замечания анализа ---
+        issues = info.result.issues(info.is_https) if info.result else {}
+        if issues:
+            print(f"    {GRAY}├──{RESET} Выявленные замечания:")
+            items = list(issues.items())
+            for idx, (title, text) in enumerate(items):
+                branch = "└──" if idx == len(items) - 1 else "├──"
+                print(
+                    f"    {GRAY}│   {branch}{RESET} {CYAN}{title}{RESET}: {YELLOW}{text}{RESET}"
+                )
 
-        headers_items = list(headers_data.items())
+        # --- БЛОК 4: Сырые заголовки ---
+        print(f"    {GRAY}└──{RESET} Полученные HTTP-заголовки:")
+
+        headers_items = list(info.headers.items())
         for idx, (key, val) in enumerate(headers_items):
-            is_last = idx == len(headers_items) - 1
-            branch = "└──" if is_last else "├──"
+            branch = "└──" if idx == len(headers_items) - 1 else "├──"
             print(
                 f"        {GRAY}{branch}{RESET} {CYAN}{key}{RESET}: {WHITE}{val}{RESET}"
             )
+
+        print(f"{GRAY}" + "-" * 80 + f"{RESET}\n")
 
     @staticmethod
     def print_tls_result(tls_results: AllTlsScanResult) -> None:

@@ -7,18 +7,17 @@ from web_analize.security_rules import (
     check_referrer_policy,
     check_technology_disclosure,
     check_x_content_type,
-    check_x_frame,
 )
 
 required_headers = [
     "content-security-policy",
-    "x-frame-options",
+    # "x-frame-options",
     "strict-transport-security",
 ]
 
 SECURITY_RULES = {
     "Content-Security-Policy": check_csp,
-    "X-Frame-Options": check_x_frame,
+    # "X-Frame-Options": check_x_frame,
     "Strict-Transport-Security": check_hsts,
     "X-Content-Type-Options": check_x_content_type,
     # Добавляем новые правила:
@@ -28,44 +27,45 @@ SECURITY_RULES = {
 }
 
 
+from pydantic_models.models import ScanResult
+
+HTTPS_PORTS = {443, 8443}
+
+
 async def get_http_headers(port: int, ip: str) -> HTTPResult:
     formatted_ip = f"[{ip}]" if ":" in ip else ip
-    protocol = "https" if port == 443 else "http"
-    url = f"{protocol}://{formatted_ip}:{port}"
+    scheme = "https" if port in HTTPS_PORTS else "http"
+    url = f"{scheme}://{formatted_ip}:{port}"
 
-    try:
-        report = {}
+    async with httpx.AsyncClient(timeout=3.0, verify=False) as session:
+        response = await session.head(url, follow_redirects=True)
 
-        async with httpx.AsyncClient(timeout=3.0, verify=False) as http_session:
-            responce = await http_session.head(url, follow_redirects=True)
+        if response.status_code in (405, 501):
+            response = await session.get(url, follow_redirects=True)
 
-            if port == 80:
-                if not responce.history and responce.url.scheme != "https":
-                    report["HTTPS-Redirect"] = (
-                        "Уязвимость: сервер не перенаправляет трафик на HTTPS."
-                    )
+    report: dict[str, str] = {}
 
-            normalized_headers = {k.lower(): v for k, v in responce.headers.items()}
-
-            for header_name, check_function in SECURITY_RULES.items():
-                current_value = normalized_headers.get(header_name.lower())
-
-                error_message = check_function(current_value)
-
-                if error_message:
-                    report[header_name] = error_message
-
-            return report
-
-    except Exception as e:
-        raise e
-
-    except httpx.HTTPError as http_err:
-        print(
-            f"[-] Сетевая ошибка [{type(http_err).__name__}] при запросе к {url}: {http_err}"
+    if scheme == "http" and response.url.scheme != "https":
+        report["HTTPS-Redirect"] = (
+            "Уязвимость: сервер не перенаправляет трафик на HTTPS."
         )
-        return {"Error": f"Сетевая ошибка: {http_err}"}
 
-    except Exception as e:
-        print(f"[!] Непредвиденная ошибка в get_http_headers для {ip}: {e}")
-        return {"Error": str(e)}
+    headers = dict(response.headers)
+    normalized = {k.lower(): v for k, v in headers.items()}
+
+    for header_name, check_function in SECURITY_RULES.items():
+        if header_name == "Strict-Transport-Security" and scheme == "http":
+            continue
+
+        error_message = check_function(normalized.get(header_name.lower()))
+        if error_message:
+            report[header_name] = error_message
+
+    return HTTPResult(
+        url=str(response.url),
+        status_code=response.status_code,
+        headers=headers,
+        server=response.headers.get("server"),
+        redirect_url=str(response.url) if response.history else None,
+        findings=ScanResult.model_validate(report),
+    )

@@ -6,8 +6,8 @@ from rich.table import Table
 from pydantic_models.models import (
     ScanAuditSummary,
     TargetScanInfo,
+    WebService,
 )
-from src.services.print_service import PRINT
 from web_analize.http_headers import get_http_headers
 
 console = Console()
@@ -58,35 +58,44 @@ def find_web_services(scan_results: ScanAuditSummary | None) -> list[dict[str, s
 # ============================================================
 
 
-async def analyze_http(web_services: list) -> TargetScanInfo:
-    """Запускает HTTP-анализ найденных веб-сервисов параллельно и выводит отчет."""
+HTTPS_PORTS = {443, 8443}
+
+
+async def analyze_http(web_services: list[WebService | dict]) -> list[TargetScanInfo]:
+    """Параллельный HTTP-анализ найденных веб-сервисов. Ничего не печатает."""
     if not web_services:
         return []
 
-    tasks = [
-        get_http_headers(ip=service["ip"], port=service["port"])
-        for service in web_services
-    ]
+    # model_validate принимает и WebService, и обычный dict
+    services = [WebService.model_validate(s) for s in web_services]
 
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    normalized_results = []
+    probes = await asyncio.gather(
+        *(get_http_headers(ip=s.ip, port=s.port) for s in services),
+        return_exceptions=True,
+    )
 
-    for service, result in zip(web_services, results):
-        if isinstance(result, Exception):
-            item = {
-                "ip": service["ip"],
-                "port": service["port"],
-                "error": str(result),
-            }
+    results: list[TargetScanInfo] = []
+    for service, probe in zip(services, probes):
+        scheme = "https" if service.port in HTTPS_PORTS else "http"
+
+        if isinstance(probe, BaseException):
+            results.append(
+                TargetScanInfo(
+                    ip=service.ip,
+                    port=service.port,
+                    scheme=scheme,
+                    error=str(probe) or type(probe).__name__,
+                )
+            )
         else:
-            item = {
-                "ip": service["ip"],
-                "port": service["port"],
-                "result": result,  # Предполагается, что тут лежит dict заголовков сервера
-            }
+            results.append(
+                TargetScanInfo(
+                    ip=service.ip,
+                    port=service.port,
+                    scheme=scheme,
+                    headers=probe.headers,
+                    result=probe.findings,
+                )
+            )
 
-        normalized_results.append(item)
-
-        PRINT.print_http_result(item)
-
-    return normalized_results
+    return results
