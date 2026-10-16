@@ -1,11 +1,12 @@
 import asyncio
+
 from sqlalchemy import text
+
 from repository.database import Async_fabric_make
 
 
 async def check_conn_db():
     print("Проверка подключения к PostgreSQL...")
-
 
     try:
         async with Async_fabric_make() as connect:

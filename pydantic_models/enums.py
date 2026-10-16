@@ -38,6 +38,7 @@ class RelationType(str, Enum):
     CERTIFICATE_FOR = "certificate_for"
     AFFECTED_BY = "affected_by"
 
+
 class AssetType(str, Enum):
     DOMAIN = "domain"
     IP = "ip"

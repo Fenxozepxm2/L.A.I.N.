@@ -1,9 +1,8 @@
-from datetime import datetime
 import ipaddress
-
-from typing import List, Optional
+from datetime import datetime
 
 from pydantic import BaseModel, Field
+
 from .enums import *
 
 
@@ -12,8 +11,10 @@ class Target(BaseModel):
     value: 192.168.0.1
     type: ip
     """
+
     value: str
     type: TargetType
+
 
 import re
 from enum import Enum
@@ -24,8 +25,6 @@ class TargetType(Enum):
     CIDR = "CIDR"
     DOMAIN = "DOMAIN"
     URL = "URL"
-
-
 
 
 def detect_target_type(value: str) -> str:
@@ -77,20 +76,32 @@ class Asset(BaseModel):
     value: str
     hostname: str | None = None
 
-        
+
+class IpList(BaseModel):
+    """
+    [{'ip_addres': '104.154.89.105', 'ip_version': 'IPv4', 'real_name': 'badssl.com'}]
+    """
+
+    items: list[dict[str, str]]
 
 
 class Host(BaseModel):
     ip: str
     hostname: str | None = None
 
-class Port(BaseModel):
 
+class ActiveHost(BaseModel):
+    """
+    [{'ip_addres': '104.154.89.105', 'state': 'up'}]
+    """
+
+    all_active_hosts: list[dict[str, str]]
+
+
+class Port(BaseModel):
     number: int = Field(ge=1, le=65535)
     protocol: Protocol = Protocol.TCP
     state: str
-
-
 
 
 class Service(BaseModel):
@@ -98,6 +109,7 @@ class Service(BaseModel):
     nginx
     1.18.0
     """
+
     port: int = Field(ge=1, le=65535)
     protocol: Protocol
     name: str | None = None
@@ -129,6 +141,7 @@ class Vulnerability(BaseModel):
     """
     Это описание самой уязвимости, не конкретный результат сканирования
     """
+
     cve_id: str
     title: str
     description: str | None = None
@@ -138,60 +151,108 @@ class Vulnerability(BaseModel):
     cpe: str | None = None
 
 
+class ScanResult(BaseModel):
+    https_redirect: str | None = Field(default=None, alias="HTTPS-Redirect")
+    content_security_policy: str | None = Field(
+        default=None, alias="Content-Security-Policy"
+    )
+    x_frame_options: str | None = Field(default=None, alias="X-Frame-Options")
+    strict_transport_security: str | None = Field(
+        default=None, alias="Strict-Transport-Security"
+    )
+    x_content_type_options: str | None = Field(
+        default=None, alias="X-Content-Type-Options"
+    )
+    referrer_policy: str | None = Field(default=None, alias="Referrer-Policy")
+    server: str | None = Field(default=None, alias="Server")
 
-class ScanPortsResult(BaseModel):
-    id: int
-    target: Target
-    name: str | None = None
-    status: str
-    hosts_count: int | None = None
-    ports_count: int | None = None
-    findings_count: int | None = None
+    class Config:
+        populate_by_name = True
+
+
+class TargetScanInfo(BaseModel):
+    ip: str
+    port: int
+    result: ScanResult
+
 
 class TlsVersionResult(BaseModel):
     version: str = Field(..., description="Версия протокола (например, tls_1_2)")
-    accepted_ciphers: List[str] = Field(..., description="Список принятых сервером шифров")
+    accepted_ciphers: list[str] = Field(
+        ..., description="Список принятых сервером шифров"
+    )
+
 
 # Модель с подробными данными о SSL-сертификате
 class CertificateInfoResult(BaseModel):
     subject: str = Field(..., description="Кому выдан сертификат (Common Name)")
     issuer: str = Field(..., description="Кем выдан сертификат (Удостоверяющий центр)")
-    is_valid: bool = Field(..., description="Является ли сертификат валидным на момент проверки")
+    is_valid: bool = Field(
+        ..., description="Является ли сертификат валидным на момент проверки"
+    )
     key_type: str = Field(..., description="Тип алгоритма ключа (RSA или ECDSA)")
-    key_size: Optional[int] = Field(None, description="Размер ключа в битах (например, 2048)")
-    fingerprint_sha256: str = Field(..., description="Уникальный SHA-256 отпечаток сертификата")
-    not_before: Optional[str] = Field(None, description="Дата начала действия в ISO формате")
-    not_after: Optional[str] = Field(None, description="Дата окончания действия в ISO формате")
-    validation_errors: List[str] = Field(default_factory=list, description="Список ошибок валидации")
+    key_size: int | None = Field(
+        None, description="Размер ключа в битах (например, 2048)"
+    )
+    fingerprint_sha256: str = Field(
+        ..., description="Уникальный SHA-256 отпечаток сертификата"
+    )
+    not_before: str | None = Field(
+        None, description="Дата начала действия в ISO формате"
+    )
+    not_after: str | None = Field(
+        None, description="Дата окончания действия в ISO формате"
+    )
+    validation_errors: list[str] = Field(
+        default_factory=list, description="Список ошибок валидации"
+    )
+
 
 # Главная мастер-модель, объединяющая весь скан
 class AllTlsScanResult(BaseModel):
     target_host: str = Field(..., description="Сканируемый домен или IP-адрес")
-    ciphers: List[TlsVersionResult] = Field(..., description="Результаты сканирования TLS-протоколов")
-    certificate: Optional[CertificateInfoResult] = Field(None, description="Данные о сертификате сервера")
+    ciphers: list[TlsVersionResult] = Field(
+        ..., description="Результаты сканирования TLS-протоколов"
+    )
+    certificate: CertificateInfoResult | None = Field(
+        None, description="Данные о сертификате сервера"
+    )
+
 
 from pydantic import BaseModel, Field
-from typing import List, Dict, Optional
+
 
 class NmapPortInfo(BaseModel):
     port: int = Field(..., description="Номер TCP/UDP порта")
     state: str = Field(..., description="Состояние порта (open, closed, filtered)")
     reason: str = Field(..., description="Причина состояния (например, syn-ack)")
     service_name: str = Field(..., alias="name", description="Имя сервиса")
-    product: Optional[str] = Field("", description="Название ПО")
-    version: Optional[str] = Field("", description="Версия ПО")
-    extrainfo: Optional[str] = Field("", description="Дополнительная информация о сервисе")
-    cpe: Optional[str] = Field("", description="Идентификатор уязвимости Common Platform Enumeration")
+    product: str | None = Field("", description="Название ПО")
+    version: str | None = Field("", description="Версия ПО")
+    extrainfo: str | None = Field("", description="Дополнительная информация о сервисе")
+    cpe: str | None = Field(
+        "", description="Идентификатор уязвимости Common Platform Enumeration"
+    )
+
 
 class NmapHostReport(BaseModel):
     ip: str = Field(..., description="IPv4 или IPv6 адрес хоста")
     status: str = Field(..., description="Статус хоста (up или down)")
-    hostnames: List[str] = Field(default_factory=list, description="Список привязанных доменных имен хоста")
-    open_ports: List[NmapPortInfo] = Field(default_factory=list, description="Список только открытых портов")
-    all_ports: List[NmapPortInfo] = Field(default_factory=list, description="Полный список просканированных портов")
+    hostnames: list[str] = Field(
+        default_factory=list, description="Список привязанных доменных имен хоста"
+    )
+    open_ports: list[NmapPortInfo] = Field(
+        default_factory=list, description="Список только открытых портов"
+    )
+    all_ports: list[NmapPortInfo] = Field(
+        default_factory=list, description="Полный список просканированных портов"
+    )
+
 
 class ScanAuditSummary(BaseModel):
     elapsed_time: float = Field(..., description="Время работы сканера в секундах")
     total_hosts: int = Field(..., description="Всего целей")
     up_hosts: int = Field(..., description="Активных хостов обнаружено")
-    hosts: List[NmapHostReport] = Field(default_factory=list, description="Подробный отчет по каждому хосту")
+    hosts: list[NmapHostReport] = Field(
+        default_factory=list, description="Подробный отчет по каждому хосту"
+    )
