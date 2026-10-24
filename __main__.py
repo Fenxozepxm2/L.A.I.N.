@@ -12,7 +12,7 @@ from pydantic_models.models import (
     detect_target_type,
 )
 from services.tls_analyze import check_tls_ports
-from src.middleware.hosts import discover_hosts, extract_hostname, scan_ports
+from src.middleware.hosts import discover_hosts, extract_hostname, result_ports
 from src.middleware.target import parse_target, resolve_target
 from src.services.print_service import PRINT
 from src.web_analize.http_service import analyze_http, find_web_services
@@ -36,6 +36,8 @@ console = Console()
 
 async def run_audit(
     target: Target,
+    flags: list | None = None,
+    preset: str | None = None
 ) -> None:
     """Полный pipeline аудита."""
 
@@ -53,7 +55,7 @@ async def run_audit(
     if not hosts:
         return
 
-    scan_results = scan_ports(hosts)
+    scan_results = result_ports(hosts, flags, preset)
     if not scan_results:
         return
 
@@ -72,13 +74,21 @@ async def run_audit(
 # ============================================================
 
 
-@app.command()
+@app.command(
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True}
+)
 def scan(
-    target: str = typer.Argument(..., help="IP, подсеть, домен или URL"),
+    target: Annotated[str, typer.Argument(help="IP, подсеть, домен или URL")],
+    
+    preset: Annotated[str, typer.Argument(help="пресеты для сканирования, от тихого до агрессивного")] = None,
+    
+    custom_flags: Annotated[list[str], typer.Argument(help="Кастомные флаги для сканирования")] = None,
+
 ):
     """ "
     запуск полноценного полного аудита (через конфиг)
     """
+
     target = target.strip()
 
     if not target:
@@ -91,7 +101,14 @@ def scan(
             type=detect_target_type(target),
         )
 
-        asyncio.run(run_audit(target_model))
+        print(target)
+        print(preset)
+
+        print(custom_flags)
+
+        asyncio.run(run_audit(target_model, custom_flags, preset))
+            
+
 
     except KeyboardInterrupt:
         print("\n[!] Сканирование прервано пользователем.")
@@ -134,7 +151,7 @@ def target(
 
     target = parse_target(hostname)
 
-    wtf = asyncio.run(resolve_target, target)
+    wtf = asyncio.run(resolve_target(target))
 
     print(f"{wtf}")
 

@@ -3,6 +3,8 @@ import asyncio
 import nmap
 from rich.console import Console
 from tqdm.asyncio import tqdm
+from middleware.pressets import SCAN_PROFILES
+
 
 console = Console()
 
@@ -13,7 +15,7 @@ class SCAN:
         self.np = nmap.PortScanner()
 
     async def scan_single_ip(self, ip: str, sem: asyncio.Semaphore) -> dict:
-        args = ["-sn", "-v", "-PS80,443"]
+        args = ["-sn", "-v"]
         if ":" in ip:
             args.append("-6")
         args.append(ip)
@@ -81,31 +83,69 @@ class SCAN:
         except Exception:
             return None
 
-    def check_ports(self, ip_list: list) -> list:
+    def scan_ports(self, 
+                    ip_list: list, 
+                    arguments: list | None = None, 
+                    preset: str | None = None
+        ) -> list:
         """
-        Без пинга ищет открытые порты, версии ПО, с флагом скорости
-        (если хочется быстро то -T4, но при нём не всегда вытаскивается cve, лучше использовать -T3 будет дольше, но достанет точно)
+            Сканирует порты и возвращает список словарей с результатом сканирования nmap
         """
+        clean_preset = None
+        if preset:
+            clean_preset = preset.lstrip("-").lower().strip()
 
         try:
             result: list[dict[str, str]] = []
+
+            user_arguments = list(arguments) if arguments else []
+
             for item in ip_list:
                 ip = item["ip_addres"]
-                base_arg = "-Pn -sV -v -F -T4"
+                
+                current_arguments = []
+                if clean_preset:
+                    preset_args = SCAN_PROFILES.get(clean_preset, [])
+                    current_arguments.extend(preset_args)
+
+                if user_arguments:
+                    # ПРОВЕРКА НА КОНФЛИКТ
+                    if '-p' in user_arguments:
+                        if '--top-ports' in current_arguments:
+                            idx = current_arguments.index('--top-ports')
+                            del current_arguments[idx:idx+2]
+                        if '-F' in current_arguments:
+                            current_arguments.remove('-F')
+                            
+                    current_arguments.extend(user_arguments)
+
+                if not clean_preset and not user_arguments:
+                    base_arguments = ['-Pn', '-sV', '-v']
+                    current_arguments.extend(base_arguments)
+
                 if ":" in ip:
-                    base_arg += " -6"
+                    current_arguments.append('-6')
+                
+                print("Финальный список аргументов перед склейкой:", current_arguments)
+                
+                # Склеиваем в строку для передачи в nmap
+                current_arguments_str = " ".join(current_arguments)
+
+
+
+                print(current_arguments_str)
 
                 print(
-                    f"[*] Сканирую хост {ip} (ищу открытые порты, версии ПО и ОС) С аргументами {base_arg}",
+                    f"[*] Сканирую хост {ip} (ищу открытые порты, версии ПО и ОС) С аргументами {current_arguments_str}",
                     end="",
                     flush=True,
                 )
-                scan = self.np.scan(hosts=ip, arguments=base_arg)
+                scan = self.np.scan(hosts=ip, arguments=current_arguments_str)
                 console.print("\n[green][+] Готово! [/green]")
                 result.append(scan)
             return result
 
         except Exception as e:
             print(
-                f"\n[!] Произошла ошибка во время сканирования в процессе check_ports: {e}"
+                f"\n[!] Произошла ошибка во время сканирования в процессе scan_ports: {e}"
             )

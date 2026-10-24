@@ -44,17 +44,19 @@ def extract_hostname(host: str) -> str:
     return hostname
 
 
-def scan_ports(hosts: ActiveHost) -> ScanAuditSummary | None:
+def result_ports(hosts: ActiveHost, 
+                arguments: list | None = None, 
+                preset: str | None = None
+) -> ScanAuditSummary | None:
     """
-    Сканирует порты/сервисы и возвращает именно ScanAuditSummary.
-    Никаких сырых repr() и len(ScanAuditSummary).
+    Сканирует порты/сервисы и возвращает ScanAuditSummary
     """
     from services.nmap_scan_parser import parse_nmap_results
 
     console.print("\n[bold]3. Сканирование портов и сервисов[/bold]")
 
     scanner = SCAN()
-    scan_results = scanner.check_ports(hosts)
+    scan_results = scanner.scan_ports(hosts, arguments, preset)
 
     if not scan_results:
         console.print("[yellow][!] Результатов сканирования нет.[/yellow]")
